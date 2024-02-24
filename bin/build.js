@@ -3,7 +3,7 @@ import { readdirSync } from 'fs';
 import { join, sep } from 'path';
 
 // Config output
-const BUILD_DIRECTORY = 'dist';
+const BUILD_DIRECTORY = 'public';
 const PRODUCTION = process.env.NODE_ENV === 'production';
 
 // Config entrypoint files
