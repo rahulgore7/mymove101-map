@@ -7,7 +7,7 @@ window.Webflow.push(() => {
   }
 
   const map = new window.google.maps.Map(mapElement, {
-    center: { lat: 21.83825727341409, lng: 73.7190406198092 },
+    center: { lat: 39.86610830468986, lng: -102.4204412752872 },
     zoom: 10,
   });
 
