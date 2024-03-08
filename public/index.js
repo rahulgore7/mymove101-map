@@ -1,1 +1,243 @@
-"use strict";(()=>{window.Webflow||(window.Webflow=[]);window.Webflow.push(()=>{let o=document.querySelector('[fs-element="map-target"]');if(!o)return;let m=new window.google.maps.Map(o,{center:{lat:21.83825727341409,lng:73.7190406198092},zoom:10}),t=document.querySelector('[fs-element="search-form"]'),n=document.querySelector('[fs-element="search-input"]');if(!t||!n)return;let r=new window.google.maps.places.Autocomplete(n,{fields:["geometry","name"],types:["geocode"]});t.addEventListener("submit",l=>{l.preventDefault(),l.stopPropagation();let e=r.getPlace();e&&e.geometry&&e.geometry.location&&(m.setCenter(e.geometry.location),console.log(e)),console.log(e)})});})();
+"use strict";
+(() => {
+  // bin/live-reload.js
+  new EventSource(`${"http://localhost:3000"}/esbuild`).addEventListener("change", () => location.reload());
+
+  // src/index.ts
+  var map;
+  var service;
+  window.Webflow ||= [];
+  window.Webflow.push(() => {
+    const mapElement = document.querySelector('[fs-element="map-target"]');
+    if (!mapElement) {
+      return;
+    }
+    map = new google.maps.Map(mapElement, {
+      center: { lat: 39.86610830468986, lng: -102.4204412752872 },
+      zoom: 15
+    });
+    const form = document.querySelector('[fs-element="search-form"]');
+    const input = document.querySelector('[fs-element="search-input"]');
+    if (!form || !input) {
+      return;
+    }
+    const autocomplete = new google.maps.places.Autocomplete(input);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const value = autocomplete.getPlace();
+      if (value && value.geometry && value.geometry.location) {
+        map.setCenter(value.geometry.location);
+        const request = {
+          location: value.geometry.location,
+          radius: 1e3,
+          // 1km radius
+          type: "restaurant"
+          // Use single string for type
+        };
+        service = new google.maps.places.PlacesService(map);
+        service.nearbySearch(request, callback);
+      }
+    });
+  });
+  function callback(results, status) {
+    if (status === google.maps.places.PlacesServiceStatus.OK) {
+      if (!results || results.length === 0) {
+        console.error("No results returned");
+        return;
+      }
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: results[0].geometry?.location }, (results2, status2) => {
+        if (status2 === "OK" && results2 && results2[0]) {
+          let county = null;
+          for (const component of results2[0].address_components) {
+            if (component.types.includes("administrative_area_level_2")) {
+              county = component.long_name;
+              console.log("County:", county);
+              break;
+            }
+          }
+          if (county) {
+            const origin = results2[0].geometry?.location ?? new google.maps.LatLng(0, 0);
+            getTransitDetails(origin, "bus_station");
+            getTransitDetails(origin, "airport");
+            getNearbySchools(origin);
+            getNearbyParks(origin);
+          }
+        } else {
+          console.error("Geocoder failed with status", status2);
+        }
+      });
+    } else {
+      console.error("Places service failed with status:", status);
+    }
+  }
+  function getTransitDetails(origin, destinationType) {
+    const request = {
+      location: origin,
+      rankBy: google.maps.places.RankBy.DISTANCE,
+      type: destinationType
+      // Update type to be a single string
+    };
+    const placesService = new google.maps.places.PlacesService(map);
+    placesService.nearbySearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        if (results.length > 0) {
+          const nearestPlace = results[0];
+          const placeName = nearestPlace.name;
+          const placeLocation = nearestPlace.geometry?.location;
+          if (placeLocation) {
+            const directionsService = new google.maps.DirectionsService();
+            const transitRequest = {
+              origin,
+              destination: placeLocation,
+              travelMode: google.maps.TravelMode.TRANSIT
+            };
+            directionsService.route(transitRequest, (result, status2) => {
+              if (status2 === google.maps.DirectionsStatus.OK && result) {
+                console.log("Nearest " + destinationType + ":", placeName);
+                console.log("Distance:", result.routes[0].legs[0].distance?.text ?? "Unknown");
+                console.log(
+                  "Estimated transit time:",
+                  result.routes[0].legs[0].duration?.text ?? "Unknown"
+                );
+                if (destinationType === "bus_station") {
+                  const bus_transit_name = document.getElementById("bus-transit-name");
+                  if (bus_transit_name) {
+                    bus_transit_name.innerHTML = placeName ?? "";
+                  }
+                  const bus_transit_distance = document.getElementById("bus-transit-distance");
+                  if (bus_transit_distance) {
+                    bus_transit_distance.innerHTML = result.routes[0].legs[0].distance?.text ?? "Unknown";
+                  }
+                } else if (destinationType === "airport") {
+                  const air_transit_name = document.getElementById("air-transit-name");
+                  if (air_transit_name) {
+                    air_transit_name.innerHTML = placeName ?? "";
+                  }
+                  const air_transit_distance = document.getElementById("air-transit-distance");
+                  if (air_transit_distance) {
+                    air_transit_distance.innerHTML = result.routes[0].legs[0].distance?.text ?? "Unknown";
+                  }
+                }
+              } else {
+                console.error("Directions service failed with status", status2);
+              }
+            });
+          }
+        } else {
+          console.error("No " + destinationType + " found near the location.");
+        }
+      } else {
+        console.error("Places service failed with status:", status);
+      }
+    });
+  }
+  function getNearbySchools(origin) {
+    const productContainer = document.querySelector(".product-container");
+    if (!productContainer) {
+      console.error("Product container not found");
+      return;
+    }
+    const request = {
+      location: origin,
+      radius: 1e3,
+      // 1km radius
+      type: "school"
+      // Search for schools
+    };
+    const placesService = new google.maps.places.PlacesService(map);
+    placesService.nearbySearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        console.log("Nearby Schools:");
+        results.forEach((place) => {
+          const placeName = place.name;
+          const placeLocation = place.geometry?.location;
+          const distance = placeLocation ? google.maps.geometry.spherical.computeDistanceBetween(origin, placeLocation).toFixed(2) : "Unknown";
+          const schoolType = place.types.includes("school") ? "public" : "private";
+          if (place.photos && place.photos[0]) {
+            const photoUrl = place.photos && place.photos[0].getUrl();
+            console.log("Name:", placeName);
+            console.log("Distance:", distance === "Unknown" ? distance : distance + " meters");
+            console.log("Type:", schoolType);
+            console.log("Photo URL:", photoUrl);
+            console.log("-------------------");
+            const productCard = document.createElement("div");
+            productCard.classList.add("product-card");
+            const productImage = document.createElement("div");
+            productImage.classList.add("product-image");
+            const productThumb = document.createElement("img");
+            productThumb.classList.add("product-thumb");
+            productThumb.src = photoUrl || "default-school-image.jpg";
+            productThumb.alt = place.name || "School Image";
+            productImage.appendChild(productThumb);
+            const productInfo = document.createElement("div");
+            productInfo.classList.add("product-info");
+            const productBrand = document.createElement("h6");
+            productBrand.classList.add("product-brand1");
+            productBrand.textContent = placeName || "Unknown School";
+            productInfo.appendChild(productBrand);
+            productCard.appendChild(productImage);
+            productCard.appendChild(productInfo);
+            productContainer.appendChild(productCard);
+          }
+        });
+      } else {
+        console.error("Places service failed with status:", status);
+      }
+    });
+  }
+  function getNearbyParks(origin) {
+    const parkContainer = document.querySelector(".park-container");
+    if (!parkContainer) {
+      console.error("Product container not found");
+      return;
+    }
+    const request = {
+      location: origin,
+      radius: 1e3,
+      // 1km radius
+      type: "park"
+      // Search for parks
+    };
+    const placesService = new google.maps.places.PlacesService(map);
+    placesService.nearbySearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        console.log("Nearby Parks:");
+        results.forEach((place) => {
+          const placeName = place.name;
+          const placeLocation = place.geometry?.location;
+          const distance = placeLocation ? google.maps.geometry.spherical.computeDistanceBetween(origin, placeLocation).toFixed(2) : "Unknown";
+          if (place.photos && place.photos[0]) {
+            const photoUrl = place.photos[0].getUrl();
+            console.log("Name:", placeName);
+            console.log("Distance:", distance === "Unknown" ? distance : distance + " meters");
+            console.log("Photo URL:", photoUrl);
+            console.log("-------------------");
+            const parkCard = document.createElement("div");
+            parkCard.classList.add("park-card");
+            const parkImage = document.createElement("div");
+            parkImage.classList.add("park-images");
+            const parkThumb = document.createElement("img");
+            parkThumb.classList.add("park-thumb");
+            parkThumb.src = photoUrl || "default-park-image.jpg";
+            parkThumb.alt = place.name || "Park Image";
+            parkImage.appendChild(parkThumb);
+            const parkInfo = document.createElement("div");
+            parkInfo.classList.add("park-info");
+            const parkBrand = document.createElement("h6");
+            parkBrand.classList.add("park-brand");
+            parkBrand.textContent = placeName || "Unknown Park";
+            parkInfo.appendChild(parkBrand);
+            parkCard.appendChild(parkImage);
+            parkCard.appendChild(parkInfo);
+            parkContainer.appendChild(parkCard);
+          }
+        });
+      } else {
+        console.error("Places service failed with status:", status);
+      }
+    });
+  }
+})();
+//# sourceMappingURL=index.js.map
