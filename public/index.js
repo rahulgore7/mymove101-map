@@ -6,6 +6,7 @@
   // src/index.ts
   var map;
   var service;
+  var marker = null;
   window.Webflow ||= [];
   window.Webflow.push(() => {
     const mapElement = document.querySelector('[fs-element="map-target"]');
@@ -22,12 +23,30 @@
       return;
     }
     const autocomplete = new google.maps.places.Autocomplete(input);
+    const schoolSection = document.querySelector(".school-section");
+    if (schoolSection) {
+      schoolSection.style.display = "none";
+    }
+    const parkSection = document.querySelector(".park-section");
+    if (parkSection) {
+      parkSection.style.display = "none";
+    }
+    const transitSection = document.querySelector(".transit-section");
+    if (transitSection) {
+      transitSection.style.display = "none";
+    }
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       e.stopPropagation();
       const value = autocomplete.getPlace();
       if (value && value.geometry && value.geometry.location) {
         map.setCenter(value.geometry.location);
+        if (schoolSection && parkSection && transitSection) {
+          schoolSection.style.display = "block";
+          parkSection.style.display = "block";
+          transitSection.style.display = "block";
+        }
+        addMarkerToMap(value.geometry.location, value.name || "Searched Location");
         const request = {
           location: value.geometry.location,
           radius: 1e3,
@@ -37,6 +56,8 @@
         };
         service = new google.maps.places.PlacesService(map);
         service.nearbySearch(request, callback);
+        getNearbySchools(value.geometry.location);
+        getNearbyParks(value.geometry.location);
       }
     });
   });
@@ -53,7 +74,6 @@
           for (const component of results2[0].address_components) {
             if (component.types.includes("administrative_area_level_2")) {
               county = component.long_name;
-              console.log("County:", county);
               break;
             }
           }
@@ -61,8 +81,6 @@
             const origin = results2[0].geometry?.location ?? new google.maps.LatLng(0, 0);
             getTransitDetails(origin, "bus_station");
             getTransitDetails(origin, "airport");
-            getNearbySchools(origin);
-            getNearbyParks(origin);
           }
         } else {
           console.error("Geocoder failed with status", status2);
@@ -87,6 +105,15 @@
           const placeName = nearestPlace.name;
           const placeLocation = nearestPlace.geometry?.location;
           if (placeLocation) {
+            const busDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat()},${origin.lng()}&destination=${placeLocation.lat()},${placeLocation.lng()}&travelmode=transit`;
+            console.log("Directions URL:", busDirectionsUrl);
+            const busImage = document.querySelector(".bus-stop-direction");
+            const airportImage = document.querySelector(".airport-direction");
+            if (busImage) {
+              busImage.addEventListener("click", () => {
+                window.open(busDirectionsUrl, "_blank");
+              });
+            }
             const directionsService = new google.maps.DirectionsService();
             const transitRequest = {
               origin,
@@ -95,12 +122,6 @@
             };
             directionsService.route(transitRequest, (result, status2) => {
               if (status2 === google.maps.DirectionsStatus.OK && result) {
-                console.log("Nearest " + destinationType + ":", placeName);
-                console.log("Distance:", result.routes[0].legs[0].distance?.text ?? "Unknown");
-                console.log(
-                  "Estimated transit time:",
-                  result.routes[0].legs[0].duration?.text ?? "Unknown"
-                );
                 if (destinationType === "bus_station") {
                   const bus_transit_name = document.getElementById("bus-transit-name");
                   if (bus_transit_name) {
@@ -146,10 +167,10 @@
       type: "school"
       // Search for schools
     };
+    productContainer.innerHTML = "";
     const placesService = new google.maps.places.PlacesService(map);
     placesService.nearbySearch(request, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        console.log("Nearby Schools:");
         results.forEach((place) => {
           const placeName = place.name;
           const placeLocation = place.geometry?.location;
@@ -157,11 +178,6 @@
           const schoolType = place.types.includes("school") ? "public" : "private";
           if (place.photos && place.photos[0]) {
             const photoUrl = place.photos && place.photos[0].getUrl();
-            console.log("Name:", placeName);
-            console.log("Distance:", distance === "Unknown" ? distance : distance + " meters");
-            console.log("Type:", schoolType);
-            console.log("Photo URL:", photoUrl);
-            console.log("-------------------");
             const productCard = document.createElement("div");
             productCard.classList.add("product-card");
             const productImage = document.createElement("div");
@@ -177,6 +193,14 @@
             productBrand.classList.add("product-brand1");
             productBrand.textContent = placeName || "Unknown School";
             productInfo.appendChild(productBrand);
+            const schoolTpe = document.createElement("div");
+            schoolTpe.classList.add("type");
+            schoolTpe.textContent = schoolType || "Unknown Type";
+            const schoolDistance = document.createElement("div");
+            schoolDistance.classList.add("distance");
+            schoolDistance.textContent = `${distance} meters` || "Unknown Distance";
+            productInfo.appendChild(schoolTpe);
+            productInfo.appendChild(schoolDistance);
             productCard.appendChild(productImage);
             productCard.appendChild(productInfo);
             productContainer.appendChild(productCard);
@@ -200,20 +224,16 @@
       type: "park"
       // Search for parks
     };
+    parkContainer.innerHTML = "";
     const placesService = new google.maps.places.PlacesService(map);
     placesService.nearbySearch(request, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        console.log("Nearby Parks:");
         results.forEach((place) => {
           const placeName = place.name;
           const placeLocation = place.geometry?.location;
           const distance = placeLocation ? google.maps.geometry.spherical.computeDistanceBetween(origin, placeLocation).toFixed(2) : "Unknown";
           if (place.photos && place.photos[0]) {
             const photoUrl = place.photos[0].getUrl();
-            console.log("Name:", placeName);
-            console.log("Distance:", distance === "Unknown" ? distance : distance + " meters");
-            console.log("Photo URL:", photoUrl);
-            console.log("-------------------");
             const parkCard = document.createElement("div");
             parkCard.classList.add("park-card");
             const parkImage = document.createElement("div");
@@ -228,7 +248,11 @@
             const parkBrand = document.createElement("h6");
             parkBrand.classList.add("park-brand");
             parkBrand.textContent = placeName || "Unknown Park";
+            const parkDistance = document.createElement("div");
+            parkDistance.classList.add("park-distance");
+            parkDistance.textContent = `${distance} meters` || "Unknown distance";
             parkInfo.appendChild(parkBrand);
+            parkInfo.appendChild(parkDistance);
             parkCard.appendChild(parkImage);
             parkCard.appendChild(parkInfo);
             parkContainer.appendChild(parkCard);
@@ -237,6 +261,16 @@
       } else {
         console.error("Places service failed with status:", status);
       }
+    });
+  }
+  function addMarkerToMap(location2, title) {
+    if (marker) {
+      marker.setMap(null);
+    }
+    marker = new google.maps.Marker({
+      position: location2,
+      map,
+      title
     });
   }
 })();

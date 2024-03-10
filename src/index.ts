@@ -1,5 +1,6 @@
 let map: google.maps.Map;
 let service: google.maps.places.PlacesService;
+let marker: google.maps.Marker | null = null;
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
@@ -21,6 +22,20 @@ window.Webflow.push(() => {
   }
 
   const autocomplete = new google.maps.places.Autocomplete(input);
+  const schoolSection = document.querySelector<HTMLElement>('.school-section');
+  if (schoolSection) {
+    schoolSection.style.display = 'none';
+  }
+
+  const parkSection = document.querySelector<HTMLElement>('.park-section');
+  if (parkSection) {
+    parkSection.style.display = 'none';
+  }
+
+  const transitSection = document.querySelector<HTMLElement>('.transit-section');
+  if (transitSection) {
+    transitSection.style.display = 'none';
+  }
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -28,6 +43,12 @@ window.Webflow.push(() => {
     const value = autocomplete.getPlace();
     if (value && value.geometry && value.geometry.location) {
       map.setCenter(value.geometry.location);
+      if (schoolSection && parkSection && transitSection) {
+        schoolSection.style.display = 'block';
+        parkSection.style.display = 'block';
+        transitSection.style.display = 'block';
+      }
+      addMarkerToMap(value.geometry.location, value.name || 'Searched Location');
       const request = {
         location: value.geometry.location,
         radius: 1000, // 1km radius
@@ -35,6 +56,8 @@ window.Webflow.push(() => {
       };
       service = new google.maps.places.PlacesService(map);
       service.nearbySearch(request, callback);
+      getNearbySchools(value.geometry.location);
+      getNearbyParks(value.geometry.location);
     }
   });
 });
@@ -57,7 +80,6 @@ function callback(
         for (const component of results[0].address_components) {
           if (component.types.includes('administrative_area_level_2')) {
             county = component.long_name;
-            console.log('County:', county);
             break;
           }
         }
@@ -68,8 +90,8 @@ function callback(
           // Get transit details
           getTransitDetails(origin, 'bus_station'); // Search for nearby bus stops
           getTransitDetails(origin, 'airport'); // Search for nearby airports
-          getNearbySchools(origin);
-          getNearbyParks(origin);
+          //getNearbySchools(origin);
+          //getNearbyParks(origin);
         }
       } else {
         console.error('Geocoder failed with status', status);
@@ -95,6 +117,15 @@ function getTransitDetails(origin: google.maps.LatLng, destinationType: string):
         const placeName = nearestPlace.name;
         const placeLocation = nearestPlace.geometry?.location;
         if (placeLocation) {
+          const busDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat()},${origin.lng()}&destination=${placeLocation.lat()},${placeLocation.lng()}&travelmode=transit`;
+          console.log('Directions URL:', busDirectionsUrl);
+          const busImage = document.querySelector('.bus-stop-direction');
+          const airportImage = document.querySelector('.airport-direction');
+          if (busImage) {
+            busImage.addEventListener('click', () => {
+              window.open(busDirectionsUrl, '_blank');
+            });
+          }
           const directionsService = new google.maps.DirectionsService();
           const transitRequest = {
             origin: origin,
@@ -103,30 +134,6 @@ function getTransitDetails(origin: google.maps.LatLng, destinationType: string):
           };
           directionsService.route(transitRequest, (result, status) => {
             if (status === google.maps.DirectionsStatus.OK && result) {
-              // const bus_transit_name = document.getElementById('bus-transit-name');
-              // if (bus_transit_name) {
-              //   bus_transit_name.innerHTML = placeName ?? '';
-              // }
-              // const bus_transit_distance = document.getElementById('bus-transit-distance');
-              // if (bus_transit_distance) {
-              //   bus_transit_distance.innerHTML =
-              //     result.routes[0].legs[0].distance?.text ?? 'Unknown';
-              // }
-              // const air_transit_name = document.getElementById('air-transit-name');
-              // if (air_transit_name) {
-              //   air_transit_name.innerHTML = placeName ?? '';
-              // }
-              // const air_transit_distance = document.getElementById('air-transit-distance');
-              // if (air_transit_distance) {
-              //   air_transit_distance.innerHTML =
-              //     result.routes[0].legs[0].distance?.text ?? 'Unknown';
-              // }
-              console.log('Nearest ' + destinationType + ':', placeName);
-              console.log('Distance:', result.routes[0].legs[0].distance?.text ?? 'Unknown');
-              console.log(
-                'Estimated transit time:',
-                result.routes[0].legs[0].duration?.text ?? 'Unknown'
-              );
               if (destinationType === 'bus_station') {
                 const bus_transit_name = document.getElementById('bus-transit-name');
                 if (bus_transit_name) {
@@ -173,28 +180,20 @@ function getNearbySchools(origin: google.maps.LatLng): void {
     radius: 1000, // 1km radius
     type: 'school', // Search for schools
   };
+  productContainer.innerHTML = '';
 
   const placesService = new google.maps.places.PlacesService(map!);
   placesService.nearbySearch(request, (results, status) => {
     if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-      console.log('Nearby Schools:');
       results.forEach((place) => {
         const placeName = place.name;
         const placeLocation = place.geometry?.location;
         const distance = placeLocation
           ? google.maps.geometry.spherical.computeDistanceBetween(origin, placeLocation).toFixed(2)
           : 'Unknown';
-        const schoolType = place.types!.includes('school') ? 'public' : 'private'; // Assuming public or private based on type
-
-        // Assuming only one photo available
+        const schoolType = place.types!.includes('school') ? 'public' : 'private';
         if (place.photos && place.photos[0]) {
           const photoUrl = place.photos && place.photos[0].getUrl();
-
-          console.log('Name:', placeName);
-          console.log('Distance:', distance === 'Unknown' ? distance : distance + ' meters');
-          console.log('Type:', schoolType);
-          console.log('Photo URL:', photoUrl);
-          console.log('-------------------');
           const productCard = document.createElement('div');
           productCard.classList.add('product-card');
 
@@ -212,7 +211,14 @@ function getNearbySchools(origin: google.maps.LatLng): void {
           productBrand.classList.add('product-brand1');
           productBrand.textContent = placeName || 'Unknown School';
           productInfo.appendChild(productBrand);
-
+          const schoolTpe = document.createElement('div');
+          schoolTpe.classList.add('type');
+          schoolTpe.textContent = schoolType || 'Unknown Type';
+          const schoolDistance = document.createElement('div');
+          schoolDistance.classList.add('distance');
+          schoolDistance.textContent = `${distance} meters` || 'Unknown Distance';
+          productInfo.appendChild(schoolTpe);
+          productInfo.appendChild(schoolDistance);
           productCard.appendChild(productImage);
           productCard.appendChild(productInfo);
 
@@ -236,11 +242,11 @@ function getNearbyParks(origin: google.maps.LatLng): void {
     radius: 1000, // 1km radius
     type: 'park', // Search for parks
   };
+  parkContainer.innerHTML = '';
 
   const placesService = new google.maps.places.PlacesService(map!);
   placesService.nearbySearch(request, (results, status) => {
     if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-      console.log('Nearby Parks:');
       results.forEach((place) => {
         const placeName = place.name;
         const placeLocation = place.geometry?.location;
@@ -252,12 +258,6 @@ function getNearbyParks(origin: google.maps.LatLng): void {
         if (place.photos && place.photos[0]) {
           // Assuming only one photo available
           const photoUrl = place.photos[0].getUrl();
-
-          console.log('Name:', placeName);
-          console.log('Distance:', distance === 'Unknown' ? distance : distance + ' meters');
-          console.log('Photo URL:', photoUrl);
-          console.log('-------------------');
-
           const parkCard = document.createElement('div');
           parkCard.classList.add('park-card');
 
@@ -274,8 +274,11 @@ function getNearbyParks(origin: google.maps.LatLng): void {
           const parkBrand = document.createElement('h6');
           parkBrand.classList.add('park-brand');
           parkBrand.textContent = placeName || 'Unknown Park';
+          const parkDistance = document.createElement('div');
+          parkDistance.classList.add('park-distance');
+          parkDistance.textContent = `${distance} meters` || 'Unknown distance';
           parkInfo.appendChild(parkBrand);
-
+          parkInfo.appendChild(parkDistance);
           parkCard.appendChild(parkImage);
           parkCard.appendChild(parkInfo);
 
@@ -285,5 +288,18 @@ function getNearbyParks(origin: google.maps.LatLng): void {
     } else {
       console.error('Places service failed with status:', status);
     }
+  });
+}
+function addMarkerToMap(location: google.maps.LatLng, title: string): void {
+  // Clear previous marker if exists
+  if (marker) {
+    marker.setMap(null);
+  }
+
+  // Create new marker at the searched location
+  marker = new google.maps.Marker({
+    position: location,
+    map: map,
+    title: title,
   });
 }
