@@ -11,7 +11,7 @@ window.Webflow.push(() => {
 
   map = new google.maps.Map(mapElement, {
     center: { lat: 39.86610830468986, lng: -102.4204412752872 },
-    zoom: 15,
+    zoom: 5,
   });
 
   const form = document.querySelector<HTMLFormElement>('[fs-element="search-form"]');
