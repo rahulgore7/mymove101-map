@@ -35,7 +35,7 @@
     if (transitSection) {
       transitSection.style.display = "none";
     }
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       e.stopPropagation();
       const value = autocomplete.getPlace();
@@ -105,15 +105,6 @@
           const placeName = nearestPlace.name;
           const placeLocation = nearestPlace.geometry?.location;
           if (placeLocation) {
-            const busDirectionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat()},${origin.lng()}&destination=${placeLocation.lat()},${placeLocation.lng()}&travelmode=transit`;
-            console.log("Directions URL:", busDirectionsUrl);
-            const busImage = document.querySelector(".bus-stop-direction");
-            const airportImage = document.querySelector(".airport-direction");
-            if (busImage) {
-              busImage.addEventListener("click", () => {
-                window.open(busDirectionsUrl, "_blank");
-              });
-            }
             const directionsService = new google.maps.DirectionsService();
             const transitRequest = {
               origin,
@@ -126,6 +117,16 @@
                   const bus_transit_name = document.getElementById("bus-transit-name");
                   if (bus_transit_name) {
                     bus_transit_name.innerHTML = placeName ?? "";
+                    const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat()},${origin.lng()}&destination=${placeLocation.lat()},${placeLocation.lng()}&travelmode=transit`;
+                    console.log("Bus Station URL:", directionsUrl);
+                    const bus_stop_direction = document.querySelector(
+                      ".bus-stop-direction"
+                    );
+                    if (bus_stop_direction) {
+                      bus_stop_direction.addEventListener("click", () => {
+                        window.open(directionsUrl, "_blank");
+                      });
+                    }
                   }
                   const bus_transit_distance = document.getElementById("bus-transit-distance");
                   if (bus_transit_distance) {
@@ -135,6 +136,16 @@
                   const air_transit_name = document.getElementById("air-transit-name");
                   if (air_transit_name) {
                     air_transit_name.innerHTML = placeName ?? "";
+                    const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat()},${origin.lng()}&destination=${placeLocation.lat()},${placeLocation.lng()}&travelmode=transit`;
+                    console.log("Airport URL:", directionsUrl);
+                    const airportDirectionImage = document.querySelector(
+                      ".airport-direction"
+                    );
+                    if (airportDirectionImage) {
+                      airportDirectionImage.addEventListener("click", () => {
+                        window.open(directionsUrl, "_blank");
+                      });
+                    }
                   }
                   const air_transit_distance = document.getElementById("air-transit-distance");
                   if (air_transit_distance) {
